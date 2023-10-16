@@ -1,0 +1,156 @@
+
+from enum import Enum
+import struct
+
+class PMS5003Values(Enum):
+    START_1 = b'\x42'
+    START_2 = b'\x4d'
+    SOF = bytearray(b'\x42\x4d')
+    PASSIVE_MODE = "PASSIVE"
+    ACTIVE_MODE = "ACTIVE"
+    CMD_MODE_PASSIVE = b'\xe1\x00\x00'
+    CMD_MODE_ACTIVE = b'\xe1\x00\x01'
+    CMD_READ = b'\xe2\x00\x00'
+    CMD_SLEEP = b'\xe4\x00\x00'
+    CMD_WAKEUP = b'\xe4\x00\x01'
+
+class PMS5003():
+    MAX_RESET_TIME = 20.0
+    MIN_CMD_INTERVAL = 0.1
+
+    def __init__(self) -> None:
+        self.mode = "ACTIVE"
+        self._buffer = bytearray(32)
+        self.data = {
+            "pm_10_standard": {
+                "name": "PM1.0",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "pm_25_standard": {
+                "name": "PM2.5",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "pm_100_standard": {
+                "name": "PM10",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "pm_10_env": {
+                "name": "PM1.0(env)",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "pm_25_env": {
+                "name": "PM2.5(env)",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "pm_100_env": {
+                "name": "PM10(env)",
+                "unit": "/m^3",
+                "value": None,
+            },
+            "particles_03_um": {
+                "name": "<0.3 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+            "particles_05_um": {
+                "name": "<0.5 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+            "particles_10_um": {
+                "name": "<1.0 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+            "particles_25_um": {
+                "name": "<2.5 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+            "particles_50_um": {
+                "name": "<5.0 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+            "particles_100_um": {
+                "name": "<10.0 um",
+                "unit": "/0.1L",
+                "value": None,
+            },
+        }
+
+    def on(self):
+        raise NotImplementedError()
+
+    def off(self):
+        raise NotImplementedError()
+    
+    def set_passive_mode(self):
+        raise NotImplementedError()
+       
+    @staticmethod
+    def _build_cmd(cmd_bytes):
+        if len(cmd_bytes) != 3:
+            raise RuntimeError("malformed command")
+        cmd = bytearray()
+        cmd_frame.extend(PMS5003Values.SOF.value)
+        cmd.extend(cmd_bytes)
+        cmd.extend(sum(cmd).to_bytes(2, "big"))
+        return cmd
+
+    def _decode_cmd_response(self, data):
+        self._load_data(8)
+    
+    def _decode_data(self, data, frame_len, data_format, checksum_idx):
+        if not self._buffer[0:2] == b"BM":
+            raise RuntimeError("Invalid data header")
+
+        data_len = struct.unpack(">H", self._buffer[2:4])[0]
+        if data_len != frame_len:
+            raise RuntimeError("Invalid data frame length")
+
+        checksum = struct.unpack(">H", self._buffer[checksum_idx:checksum_idx+2])[0]
+        check = sum(self._buffer[0:frame_len - 2])
+        if check != checksum:
+            raise RuntimeError("Invalid data checksum")
+        
+        return struct.unpack(data_format, self._buffer[2:frame_len-2])
+
+    def _load_data(self, frame_len=32) -> None:
+        """Low level buffer filling function, to be overridden"""
+        raise NotImplementedError()
+
+    def read(self) -> dict:
+        """Read any available data from the air quality sensor and
+        return a dictionary with available particulate/quality data
+        Note that "standard" concentrations are those when corrected to
+        standard atmospheric conditions (288.15 K, 1013.25 hPa), and
+        "environmental" concentrations are those measure in the current
+        atmospheric conditions.
+        """
+        self._load_data()
+
+
+
+        # unpack data
+        (
+            self.data["pm_10_standard"]["value"],
+            self.data["pm_25_standard"]["value"],
+            self.data["pm_100_standard"]["value"],
+            self.data["pm_10_env"]["value"],
+            self.data["pm_25_env"]["value"],
+            self.data["pm_100_env"]["value"],
+            self.data["particles_03_um"]["value"],
+            self.data["particles_05_um"]["value"],
+            self.data["particles_10_um"]["value"],
+            self.data["particles_25_um"]["value"],
+            self.data["particles_50_um"]["value"],
+            self.data["particles_100_um"]["value"],
+        ) = struct.unpack(">HHHHHHHHHHHH", self._buffer[4:28])
+
+        return self.data
